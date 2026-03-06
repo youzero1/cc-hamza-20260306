@@ -1,38 +1,21 @@
 'use client';
 
-import React from 'react';
-
 interface DisplayProps {
+  value: string;
   expression: string;
-  result: string;
-  onHistoryToggle: () => void;
 }
 
-const Display: React.FC<DisplayProps> = ({ expression, result, onHistoryToggle }) => {
-  const getResultClass = () => {
-    if (result.length > 12) return 'display-result xsmall';
-    if (result.length > 8) return 'display-result small';
-    return 'display-result';
+export default function Display({ value, expression }: DisplayProps) {
+  const getValueClass = () => {
+    if (value.length > 12) return 'display-value very-long';
+    if (value.length > 8) return 'display-value long';
+    return 'display-value';
   };
 
   return (
     <div className="display-container">
-      <button
-        className="display-history-btn"
-        onClick={onHistoryToggle}
-        type="button"
-        aria-label="Toggle history"
-      >
-        History
-      </button>
-      <div className="display-expression" aria-label="expression">
-        {expression || '\u00A0'}
-      </div>
-      <div className={getResultClass()} aria-label="result" aria-live="polite">
-        {result}
-      </div>
+      <div className="display-expression">{expression || '\u00A0'}</div>
+      <div className={getValueClass()}>{value}</div>
     </div>
   );
-};
-
-export default Display;
+}

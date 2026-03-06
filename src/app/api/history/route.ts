@@ -1,5 +1,4 @@
-import 'reflect-metadata';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/database';
 import { Calculation } from '@/entities/Calculation';
 
@@ -7,17 +6,18 @@ export async function GET() {
   try {
     const ds = await getDataSource();
     const repo = ds.getRepository(Calculation);
-    const calculations = await repo.find({
+    const items = await repo.find({
       order: { createdAt: 'DESC' },
+      take: 50,
     });
-    return NextResponse.json(calculations);
+    return NextResponse.json(items);
   } catch (error) {
     console.error('GET /api/history error:', error);
-    return NextResponse.json({ error: 'Failed to fetch history' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { expression, result } = body;
@@ -28,13 +28,13 @@ export async function POST(request: Request) {
 
     const ds = await getDataSource();
     const repo = ds.getRepository(Calculation);
-    const calculation = repo.create({ expression, result });
-    await repo.save(calculation);
 
-    return NextResponse.json(calculation, { status: 201 });
+    const calc = repo.create({ expression, result });
+    const saved = await repo.save(calc);
+    return NextResponse.json(saved, { status: 201 });
   } catch (error) {
     console.error('POST /api/history error:', error);
-    return NextResponse.json({ error: 'Failed to save calculation' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -46,6 +46,6 @@ export async function DELETE() {
     return NextResponse.json({ message: 'History cleared' });
   } catch (error) {
     console.error('DELETE /api/history error:', error);
-    return NextResponse.json({ error: 'Failed to clear history' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

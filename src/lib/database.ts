@@ -7,25 +7,21 @@ const dbPath = process.env.DATABASE_PATH
   ? path.resolve(process.cwd(), process.env.DATABASE_PATH)
   : path.resolve(process.cwd(), './data/cc.sqlite');
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __dataSource: DataSource | undefined;
-}
+let AppDataSource: DataSource | null = null;
 
 export async function getDataSource(): Promise<DataSource> {
-  if (global.__dataSource && global.__dataSource.isInitialized) {
-    return global.__dataSource;
+  if (AppDataSource && AppDataSource.isInitialized) {
+    return AppDataSource;
   }
 
-  const dataSource = new DataSource({
+  AppDataSource = new DataSource({
     type: 'better-sqlite3',
     database: dbPath,
-    entities: [Calculation],
     synchronize: true,
     logging: false,
+    entities: [Calculation],
   });
 
-  await dataSource.initialize();
-  global.__dataSource = dataSource;
-  return dataSource;
+  await AppDataSource.initialize();
+  return AppDataSource;
 }

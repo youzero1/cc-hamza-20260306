@@ -2,9 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'CC Calculator',
-  description: 'A productivity calculator app',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
+  title: 'CC — Productivity Calculator',
+  description: 'A clean, mobile-friendly productivity calculator',
 };
 
 export default function RootLayout({

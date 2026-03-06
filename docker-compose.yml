@@ -6,14 +6,12 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - '3000:3000'
+      - "3000:3000"
     volumes:
-      - cc-data:/app/data
-    environment:
-      - NODE_ENV=production
-      - DATABASE_PATH=./data/cc.sqlite
+      - cc_data:/app/data
+    env_file:
+      - .env
     restart: unless-stopped
 
 volumes:
-  cc-data:
-    driver: local
+  cc_data:

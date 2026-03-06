@@ -1,274 +1,215 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Display from './Display';
 import Button from './Button';
 import History from './History';
 import { calculate } from '@/utils/calculate';
 
-type ButtonDef = {
-  label: string;
-  action: string;
-  variant?: 'number' | 'operator' | 'function' | 'equals';
-  isZero?: boolean;
-  isSmallText?: boolean;
-  isDanger?: boolean;
-};
+interface HistoryItem {
+  id: number;
+  expression: string;
+  result: string;
+  createdAt: string;
+}
 
-const BUTTONS: ButtonDef[] = [
-  { label: 'AC', action: 'AC', variant: 'function' },
-  { label: '+/-', action: 'SIGN', variant: 'function' },
-  { label: '%', action: '%', variant: 'function' },
-  { label: '÷', action: '÷', variant: 'operator' },
-
-  { label: '7', action: '7', variant: 'number' },
-  { label: '8', action: '8', variant: 'number' },
-  { label: '9', action: '9', variant: 'number' },
-  { label: '×', action: '×', variant: 'operator' },
-
-  { label: '4', action: '4', variant: 'number' },
-  { label: '5', action: '5', variant: 'number' },
-  { label: '6', action: '6', variant: 'number' },
-  { label: '−', action: '−', variant: 'operator' },
-
-  { label: '1', action: '1', variant: 'number' },
-  { label: '2', action: '2', variant: 'number' },
-  { label: '3', action: '3', variant: 'number' },
-  { label: '+', action: '+', variant: 'operator' },
-
-  { label: '0', action: '0', variant: 'number', isZero: true },
-  { label: '.', action: '.', variant: 'number' },
-  { label: '=', action: '=', variant: 'equals' },
-];
+type CalcState = 'input' | 'result';
 
 export default function Calculator() {
-  const [expression, setExpression] = useState('');
   const [display, setDisplay] = useState('0');
-  const [hasResult, setHasResult] = useState(false);
-  const [lastOp, setLastOp] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
-  const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [expression, setExpression] = useState('');
+  const [state, setState] = useState<CalcState>('input');
+  const [activeOp, setActiveOp] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
-  const operators = ['÷', '×', '−', '+', '%'];
+  const fetchHistory = useCallback(async () => {
+    try {
+      const res = await fetch('/api/history');
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data);
+      }
+    } catch {
+      // silently fail
+    }
+  }, []);
 
-  const saveCalculation = useCallback(async (expr: string, result: string) => {
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  const saveHistory = useCallback(async (expr: string, result: string) => {
     try {
       await fetch('/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expression: expr, result }),
       });
-      setHistoryRefresh((n) => n + 1);
-    } catch (err) {
-      console.error('Failed to save calculation:', err);
+      await fetchHistory();
+    } catch {
+      // silently fail
+    }
+  }, [fetchHistory]);
+
+  const clearHistory = useCallback(async () => {
+    try {
+      await fetch('/api/history', { method: 'DELETE' });
+      setHistory([]);
+    } catch {
+      // silently fail
     }
   }, []);
 
-  const handleAction = useCallback(
-    (action: string) => {
-      if (action === 'AC') {
-        setExpression('');
-        setDisplay('0');
-        setHasResult(false);
-        setLastOp(null);
-        return;
-      }
+  const handleNumber = useCallback((num: string) => {
+    if (state === 'result') {
+      setDisplay(num);
+      setExpression('');
+      setState('input');
+      setActiveOp(null);
+      return;
+    }
+    setDisplay(prev => {
+      if (prev === '0' && num !== '.') return num;
+      if (num === '.' && prev.includes('.')) return prev;
+      if (prev.length >= 15) return prev;
+      return prev + num;
+    });
+    setActiveOp(null);
+  }, [state]);
 
-      if (action === 'BACKSPACE') {
-        if (hasResult) {
-          setExpression('');
-          setDisplay('0');
-          setHasResult(false);
-          return;
-        }
-        const newExpr = expression.slice(0, -1);
-        setExpression(newExpr);
-        if (newExpr === '' || newExpr === '-') {
-          setDisplay('0');
-        } else {
-          const lastNum = newExpr.split(/[÷×−+%]/).pop() || '0';
-          setDisplay(lastNum || '0');
-        }
-        return;
-      }
+  const handleOperator = useCallback((op: string) => {
+    setActiveOp(op);
+    if (state === 'result') {
+      setExpression(display + ' ' + op);
+      setState('input');
+      setDisplay('0');
+      return;
+    }
+    if (expression && display === '0' && state === 'input') {
+      // Replace the last operator
+      setExpression(prev => prev.trim().slice(0, -1) + op);
+      return;
+    }
+    setExpression(prev => prev + display + ' ' + op + ' ');
+    setDisplay('0');
+    setState('input');
+  }, [display, expression, state]);
 
-      if (action === 'SIGN') {
-        if (display === '0' && expression === '') return;
-        if (hasResult) {
-          const negated = display.startsWith('-') ? display.slice(1) : '-' + display;
-          setDisplay(negated);
-          setExpression(negated);
-          return;
-        }
-        // Negate last number in expression
-        const parts = expression.split(/(?<=[÷×−+])/); // split after operator
-        if (parts.length > 0) {
-          const lastPart = parts[parts.length - 1];
-          const negated = lastPart.startsWith('-') ? lastPart.slice(1) : '-' + lastPart;
-          parts[parts.length - 1] = negated;
-          const newExpr = parts.join('');
-          setExpression(newExpr);
-          setDisplay(negated || '0');
-        }
-        return;
-      }
+  const handleEqual = useCallback(() => {
+    const fullExpr = expression + display;
+    const result = calculate(fullExpr);
+    const displayExpr = fullExpr.replace(/\*/g, '×').replace(/\//g, '÷');
+    setDisplay(result);
+    setExpression(displayExpr + ' =');
+    setState('result');
+    setActiveOp(null);
+    if (result !== 'Error') {
+      saveHistory(displayExpr, result);
+    }
+  }, [display, expression, saveHistory]);
 
-      const isOp = operators.includes(action);
-      const isDigit = /^[0-9]$/.test(action);
-      const isDot = action === '.';
+  const handleClear = useCallback(() => {
+    setDisplay('0');
+    setExpression('');
+    setState('input');
+    setActiveOp(null);
+  }, []);
 
-      if (action === '=') {
-        if (!expression && display === '0') return;
-        const fullExpr = expression || display;
-        if (!fullExpr) return;
+  const handleToggleSign = useCallback(() => {
+    setDisplay(prev => {
+      if (prev === '0') return '0';
+      if (prev.startsWith('-')) return prev.slice(1);
+      return '-' + prev;
+    });
+  }, []);
 
-        const result = calculate(fullExpr);
-        const displayExpr = fullExpr
-          .replace(/÷/g, ' ÷ ')
-          .replace(/×/g, ' × ')
-          .replace(/−/g, ' − ')
-          .replace(/\+/g, ' + ')
-          .replace(/  +/g, ' ');
+  const handlePercent = useCallback(() => {
+    setDisplay(prev => {
+      const val = parseFloat(prev) / 100;
+      return String(val);
+    });
+  }, []);
 
-        if (!result.startsWith('Error')) {
-          saveCalculation(displayExpr.trim(), result);
-        }
+  const handleBackspace = useCallback(() => {
+    if (state === 'result') {
+      handleClear();
+      return;
+    }
+    setDisplay(prev => {
+      if (prev.length <= 1 || (prev.length === 2 && prev.startsWith('-'))) return '0';
+      return prev.slice(0, -1);
+    });
+  }, [state, handleClear]);
 
-        setExpression(displayExpr.trim());
-        setDisplay(result);
-        setHasResult(true);
-        setLastOp(null);
-        return;
-      }
-
-      if (isOp) {
-        setLastOp(action);
-        if (hasResult) {
-          // continue calculation from result
-          const newExpr = display + action;
-          setExpression(newExpr);
-          setHasResult(false);
-          return;
-        }
-
-        // Replace trailing operator
-        const trimmed = expression.replace(/[÷×−+%]$/, '');
-        setExpression(trimmed + action);
-        return;
-      }
-
-      if (isDigit) {
-        if (hasResult) {
-          // Start fresh
-          setExpression(action);
-          setDisplay(action);
-          setHasResult(false);
-          setLastOp(null);
-          return;
-        }
-
-        const newExpr = expression + action;
-        setExpression(newExpr);
-
-        // Update display with last number segment
-        const lastNum = newExpr.split(/[÷×−+]/).pop() || action;
-        // Prevent leading zeros
-        if (lastNum === '0' + action && action !== '0') {
-          const fixedExpr = expression.slice(0, -1) + action;
-          setExpression(fixedExpr);
-          setDisplay(action);
-          return;
-        }
-        setDisplay(lastNum);
-        return;
-      }
-
-      if (isDot) {
-        if (hasResult) {
-          setExpression('0.');
-          setDisplay('0.');
-          setHasResult(false);
-          return;
-        }
-        // Get last segment
-        const segments = expression.split(/[÷×−+]/);
-        const lastSeg = segments[segments.length - 1];
-        if (lastSeg.includes('.')) return; // already has dot
-        const newExpr = expression === '' ? '0.' : expression + '.';
-        setExpression(newExpr);
-        const lastNum = newExpr.split(/[÷×−+]/).pop() || '0.';
-        setDisplay(lastNum);
-      }
-    },
-    [expression, display, hasResult, operators, saveCalculation]
-  );
+  const handleHistorySelect = useCallback((result: string) => {
+    setDisplay(result);
+    setExpression('');
+    setState('result');
+    setActiveOp(null);
+  }, []);
 
   // Keyboard support
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key >= '0' && e.key <= '9') {
-        handleAction(e.key);
-      } else if (e.key === '.') {
-        handleAction('.');
-      } else if (e.key === '+') {
-        handleAction('+');
-      } else if (e.key === '-') {
-        handleAction('−');
-      } else if (e.key === '*') {
-        handleAction('×');
-      } else if (e.key === '/') {
-        e.preventDefault();
-        handleAction('÷');
-      } else if (e.key === '%') {
-        handleAction('%');
-      } else if (e.key === 'Enter' || e.key === '=') {
-        handleAction('=');
-      } else if (e.key === 'Backspace') {
-        handleAction('BACKSPACE');
-      } else if (e.key === 'Escape') {
-        handleAction('AC');
-      }
+    const handler = (e: KeyboardEvent) => {
+      const key = e.key;
+      if (key >= '0' && key <= '9') handleNumber(key);
+      else if (key === '.') handleNumber('.');
+      else if (key === '+') handleOperator('+');
+      else if (key === '-') handleOperator('-');
+      else if (key === '*') handleOperator('*');
+      else if (key === '/') { e.preventDefault(); handleOperator('/'); }
+      else if (key === '%') handlePercent();
+      else if (key === 'Enter' || key === '=') handleEqual();
+      else if (key === 'Backspace') handleBackspace();
+      else if (key === 'Escape') handleClear();
     };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleNumber, handleOperator, handleEqual, handleBackspace, handleClear, handlePercent]);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleAction]);
-
-  const displayExpression = expression
-    .replace(/÷/g, ' ÷ ')
-    .replace(/×/g, ' × ')
-    .replace(/−/g, ' − ')
-    .replace(/\+/g, ' + ')
-    .replace(/  +/g, ' ')
-    .trim();
+  const isAC = display === '0' && expression === '';
 
   return (
-    <div className="app-container">
-      <Display
-        expression={hasResult ? displayExpression : displayExpression.replace(/[÷×−+%]?$/, '')}
-        result={display}
-        onHistoryToggle={() => setShowHistory(true)}
-      />
-      <div className="buttons-container">
-        {BUTTONS.map((btn, idx) => (
-          <Button
-            key={idx}
-            label={btn.label}
-            onClick={() => handleAction(btn.action)}
-            variant={btn.variant}
-            isZero={btn.isZero}
-            isSmallText={btn.isSmallText}
-            isDanger={btn.isDanger}
-            isActiveOp={!hasResult && btn.action === lastOp}
-          />
-        ))}
+    <div className="calculator-wrapper">
+      <div className="calculator-title">CC Calculator</div>
+
+      <Display value={display} expression={expression} />
+
+      <div className="button-grid">
+        {/* Row 1 */}
+        <Button label={isAC ? 'AC' : 'C'} type="clear" onClick={isAC ? handleClear : handleClear} />
+        <Button label="+/-" type="function" onClick={handleToggleSign} />
+        <Button label="%" type="function" onClick={handlePercent} />
+        <Button label="⌫" type="function" onClick={handleBackspace} />
+
+        {/* Row 2 */}
+        <Button label="7" type="number" onClick={() => handleNumber('7')} />
+        <Button label="8" type="number" onClick={() => handleNumber('8')} />
+        <Button label="9" type="number" onClick={() => handleNumber('9')} />
+        <Button label="÷" type="operator" active={activeOp === '/'} onClick={() => handleOperator('/')} />
+
+        {/* Row 3 */}
+        <Button label="4" type="number" onClick={() => handleNumber('4')} />
+        <Button label="5" type="number" onClick={() => handleNumber('5')} />
+        <Button label="6" type="number" onClick={() => handleNumber('6')} />
+        <Button label="×" type="operator" active={activeOp === '*'} onClick={() => handleOperator('*')} />
+
+        {/* Row 4 */}
+        <Button label="1" type="number" onClick={() => handleNumber('1')} />
+        <Button label="2" type="number" onClick={() => handleNumber('2')} />
+        <Button label="3" type="number" onClick={() => handleNumber('3')} />
+        <Button label="−" type="operator" active={activeOp === '-'} onClick={() => handleOperator('-')} />
+
+        {/* Row 5 */}
+        <Button label="0" type="number" wide onClick={() => handleNumber('0')} />
+        <Button label="." type="number" onClick={() => handleNumber('.')} />
+        <Button label="+" type="operator" active={activeOp === '+'} onClick={() => handleOperator('+')} />
+
+        {/* Row 6 - Equal spans full row */}
+        <Button label="=" type="equal" onClick={handleEqual} />
       </div>
-      {showHistory && (
-        <History
-          onClose={() => setShowHistory(false)}
-          refreshTrigger={historyRefresh}
-        />
-      )}
+
+      <History items={history} onClear={clearHistory} onSelect={handleHistorySelect} />
     </div>
   );
 }

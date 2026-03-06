@@ -1,50 +1,40 @@
 'use client';
 
-import React from 'react';
+import { useState } from 'react';
 
 interface ButtonProps {
   label: string;
   onClick: () => void;
-  variant?: 'number' | 'operator' | 'function' | 'equals';
-  isZero?: boolean;
-  isSmallText?: boolean;
-  isDanger?: boolean;
-  isActiveOp?: boolean;
-  className?: string;
+  type?: 'number' | 'operator' | 'function' | 'clear' | 'equal';
+  wide?: boolean;
+  active?: boolean;
 }
 
-const Button: React.FC<ButtonProps> = ({
-  label,
-  onClick,
-  variant = 'number',
-  isZero = false,
-  isSmallText = false,
-  isDanger = false,
-  isActiveOp = false,
-  className = '',
-}) => {
-  const classes = [
-    'calc-btn',
-    `btn-${variant}`,
-    isZero ? 'btn-zero' : '',
-    isSmallText ? 'btn-small-text' : '',
-    isDanger ? 'btn-danger' : '',
-    isActiveOp ? 'active-op' : '',
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+export default function Button({ label, onClick, type = 'number', wide = false, active = false }: ButtonProps) {
+  const [pressed, setPressed] = useState(false);
+
+  const handlePointerDown = () => setPressed(true);
+  const handlePointerUp = () => {
+    setPressed(false);
+    onClick();
+  };
+  const handlePointerLeave = () => setPressed(false);
+
+  let className = `calc-btn ${type}`;
+  if (wide) className += ' zero';
+  if (pressed) className += ' pressed';
+  if (active) className += ' active';
 
   return (
     <button
-      className={classes}
-      onClick={onClick}
+      className={className}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerLeave}
+      onPointerCancel={handlePointerLeave}
       aria-label={label}
-      type="button"
     >
       {label}
     </button>
   );
-};
-
-export default Button;
+}
