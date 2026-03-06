@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  cc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '3000:3000'
+    volumes:
+      - cc-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - DATABASE_PATH=./data/cc.sqlite
+    restart: unless-stopped
+
+volumes:
+  cc-data:
+    driver: local
